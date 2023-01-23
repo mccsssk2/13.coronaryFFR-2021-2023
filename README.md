@@ -12,7 +12,7 @@ stenosis severity. The radiologist presently assesses the severity by visual ins
 In general, the radiologist classifies the coronary stenosis as severe in cases when the constriction (stenosis) is more than
 50% of the known normal diameter value of the concerned vessel. However, the simple assessment is known to lead to
 misdiagnosis culminating in patients receiving unnecessary high risk treatment.CFD/FSI modelling may improve 
-the diagnostics. However, current CFD modelling is a cost burden to Canadian, UK, and EU healthcare systems with a
+the diagnostics. However, current CFD modelling is a cost burden to Canadian, UK's NHS, and EU healthcare systems with a
 price tag of approx. GBP1200 for every patient exam, which still requires 1 to 2 days for the report to become available.
 
 In this proprietary repo, computational estimation of a clinical metric called coronary fractional flow reserve (FFR) is provided.
@@ -60,7 +60,7 @@ The end result of the image processing is a VTK file, and ASCII files that provi
 
 ## Source and use.
 
-* Preprocessing: The 1D centerlines (coordinates, diameters) provide the CFD geometry and 1D mesh as shown in figure above that use custom matlab codes. The code was developed in matlab to permit uptake by graduate and undergraduate developers. The matlab preprocessor generates the geometry assigning location specific material properties, estimates that boundary conditions at the terminals, and organizes the input aortic flow temporal profiles for dynamic CFD simulation. All the information is written into a SimVascular script, nominally called "in script". An example of the in script is provided in the data/ directory.  
+* Preprocessing: The 1D centerlines (coordinates, diameters) provide the CFD geometry and 1D mesh as shown in figure above that use custom matlab codes. The code was developed in matlab to permit uptake by graduate and undergraduate developers. The matlab preprocessor generates the geometry assigning location specific material properties, estimates that boundary conditions at the terminals, and organizes the input aortic flow temporal profiles for dynamic CFD simulation. All the information is written into a SimVascular script, nominally called "in script". An example of the in script is provided in the data/ directory. As an intermmediate, an ASCII file in SWC format (https://neuromorpho.org/myfaq.jsp) is created which facilitates a lightweight manner of sharing geometries compared to the large file sizes required by the binary VTK files.
 
 * Simulation: The simulation is simply:  
 OneDSolver name_of_in_script.in  
