@@ -1,0 +1,313 @@
+"""
+Working thru the colab for N-D x and 1-D y. y is FFRi , i = 1,2,3.
+Nov 30.
+Modify the uctcolab.py in Nov29/ to see if it works on the 26 Nov's 400 data.
+Nov 30. This is inspired by the basic use case. As of today, it seems to go thru'. Now to present the probability of the prediction.
+"""
+
+# Imports
+import random
+import numpy as np
+import matplotlib.pyplot as plt
+import pytorch_lightning as pl
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+import os
+import sys
+import math
+# Import Uncertainty Toolbox
+import uncertainty_toolbox as uct
+# Imports specifically for this tutorial.
+from simple_uq.models.pnn import PNN
+from simple_uq.util.synthetic_data import create_1d_data # this 1D data function needs to become 2D or 5D.
+# SRK function.
+from simple_uq.util.synthetic_data import create_2d_data # this 1D data function needs to become 2D or 5D.
+
+# something I may not need.
+# Set random seed
+# seed = 111
+# random.seed(seed)
+# np.random.seed(seed)
+# torch.manual_seed(seed)
+
+
+## Specify file directories
+# Training data.
+parent_dir_train 	= 'modelUQ_training400Inst_Nov'
+# Test data.
+parent_dir_test 	= 'modelUQ_testing40Inst_Nov'
+# recalibration data dir.
+parent_dir_recalib = 'modelUQ_Reclibrate200Inst_Nov'
+# files 			= os.listdir(parent_dir_train)
+# Input files
+train_inputRaw 	= np.loadtxt(os.path.join(parent_dir_train, 'AllInputs.dat'), 		delimiter=" ", unpack=False)
+train_outputRaw 	= np.loadtxt(os.path.join(parent_dir_train, 'AllOutputs1.dat'), 	delimiter=" ", unpack=False)
+test_inputRaw 	= np.loadtxt(os.path.join(parent_dir_test,  'AllInputs.dat'), 		delimiter=" ", unpack=False)
+test_outputRaw 	= np.loadtxt(os.path.join(parent_dir_test, 'AllOutputs1.dat'), 	delimiter=" ", unpack=False)
+recalib_inputRaw	= np.loadtxt(os.path.join(parent_dir_recalib, 'AllInputs.dat'), 	delimiter=" ", unpack=False)
+recalib_outputRaw = np.loadtxt(os.path.join(parent_dir_recalib,  'AllOutputs1.dat'), 	delimiter=" ", unpack=False)
+
+rawrows, rawcols = train_inputRaw.shape
+
+# print(train_inputRaw.shape)
+# print(test_inputRaw.shape)
+# sys.exit()
+##################################################
+# Nov 29. Take all relevant inputs, but take only outputs that are FFR1, FFR2, FFR3.
+# Nov 15. Double check if you are really removing unwanted rows/rows where simulation appears to have failed.
+# as of now, I go in with 5200 lines of data, and come out with 3900 lines of data.
+# clean up the training and test information.
+# removing failed simulations did not prevent loss to be nan.
+# remove data rows from training data where simulation failed.
+idx = []
+for row in range(len(train_outputRaw)):
+	if [0.0]*rawcols > train_outputRaw[row].tolist(): # is this true if there is one -1, or do all in the row have to be -1?
+		idx.append(row)
+#		print(row)
+# Drop failed simulation values from input and output files
+train_input1 	= np.delete(train_inputRaw, 		idx, 0)
+train_output1 	= np.delete(train_outputRaw, 	idx, 0)
+# remove data rows from test data where simulation failed.
+idx = []
+for row in range(len(test_outputRaw)):
+	if [0.0]*rawcols > test_outputRaw[row].tolist():
+		idx.append(row)
+# Drop failed simulation values from input and output files
+test_input1 	= np.delete(test_inputRaw, 	idx, 0)
+test_output1 	= np.delete(test_outputRaw, 	idx, 0)
+
+# remove data rows from recalib data where simulation failed.
+idx = []
+for row in range(len(recalib_outputRaw)):
+	if [0.0]*rawcols > recalib_outputRaw[row].tolist():
+		idx.append(row)
+# Drop failed simulation values from input and output files
+recalib_input1 	= np.delete(recalib_inputRaw, 	idx, 0)
+recalib_output1 	= np.delete(recalib_outputRaw, 	idx, 0)
+
+
+# print(train_input1.shape)
+# print(train_output1.shape)
+# print(test_input1.shape)
+# print(test_output1.shape)
+
+# plt.plot(train_output[:,0])
+# plt.show()
+# sys.exit()
+##################################################
+
+# take FFR1 from output. Take 3 columns from input. Both train and test.
+n=5 # using n instead of hardcoding it affects the result a bit.
+train_output 		= train_output1[:,n:n+1] # FFR1. You have to use 0:1 to give the array the second dimension.
+test_output 		= test_output1[:,n:n+1] # FFR1.
+recalib_output 	= recalib_output1[:,n:n+1] # FFR1.
+# print(train_output)
+# sys.exit()
+
+# the RCRCR is not in here yet. RCRCR are cols 23 to 29 in AllInputs.dat.
+myCols = [1, 4, 9, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22]
+train_input 		= train_input1[:, myCols]
+test_input 		= test_input1[:,  myCols]
+recalib_input 		= recalib_input1[:,myCols]
+
+inrows, incols 	= train_input.shape
+outrows, outcols 	= train_output.shape
+amt_train 		= int(0.9*inrows)
+amt_valid 		= int(0.1*inrows)
+
+# print(train_output.shape, train_output1.shape, train_input.shape)
+# print(train_output)
+# sys.exit()
+
+# Standardize all inputs and all outputs.
+# print(np.min(train_output), 		np.max(train_output), 		np.mean(train_output))
+# print(np.min(test_output), 		np.max(test_output), 		np.mean(test_output))
+# print(np.min(recalib_output), 	np.max(recalib_output), 	np.mean(recalib_output))
+
+train_out_min 	= np.min(train_output)
+train_out_max 	= np.max(train_output)
+train_out_mean 	= np.mean(train_output)
+train_out_dx 		= train_out_max - train_out_min
+
+test_out_min 		= np.min(test_output)
+test_out_max 		= np.max(test_output)
+test_out_mean 	= np.mean(test_output)
+test_out_dx 		= test_out_max - test_out_min
+
+recalib_out_min 	= np.min(recalib_output)
+recalib_out_max 	= np.max(recalib_output)
+recalib_out_mean 	= np.mean(recalib_output)
+recalib_out_dx 	= recalib_out_max - recalib_out_min
+
+for i in range(0, len(train_output)):
+	train_output[i] = (train_output[i] - train_out_mean)/train_out_dx
+for i in range(0, len(test_output)):
+	test_output[i] = (test_output[i] - test_out_mean)/test_out_dx
+for i in range(0, len(recalib_output)):
+	recalib_output[i] = (recalib_output[i] - recalib_out_mean)/recalib_out_dx
+
+# standardize inputs, and hold them in arrays.
+train_inrows, train_incols 		= train_input.shape
+test_inrows, test_incols 			= test_input.shape
+recalib_inrows, recalib_incols 	= recalib_input.shape
+
+train_in_mean = np.zeros((train_incols,1))
+train_in_min 	= np.zeros((train_incols,1))
+train_in_max 	= np.zeros((train_incols,1))
+train_in_dx 	= np.zeros((train_incols,1))
+
+for i in range(0, train_incols):
+	train_in_mean[i] 	= np.mean(train_input[:,i])
+	train_in_min[i] 	= np.min(train_input[:,i])
+	train_in_max[i] 	= np.max(train_input[:,i])
+	train_in_dx[i]	 	= train_in_max[i] - train_in_min[i]
+	for j in range(0, train_inrows):
+		train_input[j,i] = (train_input[j,i] - train_in_mean[i])/train_in_dx[i]
+
+test_in_mean = np.zeros((test_incols,1))
+test_in_min 	= np.zeros((test_incols,1))
+test_in_max 	= np.zeros((test_incols,1))
+test_in_dx 	= np.zeros((test_incols,1))
+
+for i in range(0, test_incols):
+	test_in_mean[i] 	= np.mean(test_input[:,i])
+	test_in_min[i] 		= np.min(test_input[:,i])
+	test_in_max[i] 	= np.max(test_input[:,i])
+	test_in_dx[i]	 	= test_in_max[i] - test_in_min[i]
+	for j in range(0, test_inrows):
+		test_input[j,i] = (test_input[j,i] - test_in_mean[i])/test_in_dx[i]
+
+recalib_in_mean 	= np.zeros((recalib_incols,1))
+recalib_in_min 	= np.zeros((recalib_incols,1))
+recalib_in_max 	= np.zeros((recalib_incols,1))
+recalib_in_dx 		= np.zeros((recalib_incols,1))
+
+for i in range(0, recalib_incols):
+	recalib_in_mean[i] 	= np.mean(recalib_input[:,i])
+	recalib_in_min[i] 	= np.min(recalib_input[:,i])
+	recalib_in_max[i] 	= np.max(recalib_input[:,i])
+	recalib_in_dx[i]	= recalib_in_max[i] - recalib_in_min[i]
+	for j in range(0, recalib_inrows):
+		recalib_input[j,i] = (recalib_input[j,i] - recalib_in_mean[i])/recalib_in_dx[i]
+
+"""Assemble the datasets into dataloaders."""
+np_data, dataloaders = {}, {}
+for data_type in [('Train'), ('Validation'), ('Test'), ('Recalib')]:
+    if data_type=='Train':
+        xpts = train_input[:amt_train,:]
+        ypts = train_output[:amt_train,:]
+    elif data_type=='Validation':
+        xpts = train_input[amt_train:,:]
+        ypts = train_output[amt_train:,:]
+    elif data_type=='Test':
+        xpts = test_input
+        ypts = test_output
+    elif data_type=='Recalib':
+        xpts = recalib_input
+        ypts = recalib_output     
+
+    np_data[data_type] = (xpts, ypts.reshape(-1,)) # see: https://stackoverflow.com/questions/17869840/numpy-vector-n-1-dimension-n-dimension-conversion
+    dataloader = DataLoader(
+        TensorDataset(
+            torch.Tensor(xpts), # dont need to reshape as I have columns. Reshape only if using single columns of data. A single column needs to be shaped into a matrix (tensor) object.
+            torch.Tensor(ypts),
+	        ),
+        batch_size=256,
+        shuffle=True,
+    )
+    dataloaders[data_type] = dataloader
+
+# print(np_data['Train'])
+# print(np_data['Test'])
+# sys.exit()
+
+# for idx, (data, target) in enumerate(dataloaders['Test']):
+#    print(data[0])
+#    print(target[0])
+
+"""Make the PNN model."""
+pnn = PNN(
+    input_dim				= 13, # putting incols here messes things up.
+    output_dim				= 1,
+    encoder_hidden_sizes	= [64, 64],
+    encoder_output_dim		= 64,
+    mean_hidden_sizes		= [],
+    logvar_hidden_sizes		= [],
+)
+
+# sys.exit()
+
+"""Train the model with a pytorch-lightning trainer."""
+# number of epochs improves sensitivity.
+trainer 			= pl.Trainer(max_epochs=100, check_val_every_n_epoch=5)
+trainer.fit(pnn, dataloaders['Train'], dataloaders['Validation'])
+# Get the test output.
+test_results 		= trainer.test(pnn, dataloaders['Test'])
+
+# print(test_results)
+# sys.exit()
+
+# Get PNN predictive uncertainties
+te_x, te_y 				= np_data['Test'] # this is where the synthetic experimental data goes.
+# pred_mean, pred_std 		= pnn.get_mean_and_standard_deviation(te_x.reshape(-1, 1))
+pred_mean, pred_std 		= pnn.get_mean_and_standard_deviation(te_x)
+pred_mean 				= pred_mean.flatten()
+pred_std 				= pred_std.flatten()
+
+print(pred_mean.shape, pred_std.shape, te_y.shape, te_x.shape)
+# print(pred_std)
+
+# sys.exit()
+
+"""
+The std of the predicted (pred_std) is not inf when:
+1) Input ranges are small, maybe between -1 and 1 avoiding 0.
+2) inputs themselves are reasonable numbers.
+3) there is no 'translation' of the mean, i.e. the mean function does not have terms like (x - x_translation)^p for any p.
+"""
+# Get all metrics.
+pnn_metrics = uct.metrics.get_all_metrics(pred_mean, pred_std, te_y)
+print(pnn_metrics) # meaning of each metric.
+# sys.exit()
+
+"""Recalibrate predictive uncertainties"""
+# Get separate recalibration data.
+recal_x, recal_y 				= np_data['Recalib'] # create_2d_data(1500)
+
+# Get the predictive uncertainties in terms of expected proportions and observed proportions on the recalibration set.
+recal_pred_mean, recal_pred_std = pnn.get_mean_and_standard_deviation(recal_x)
+#    recal_x.reshape(-1, 1)
+recal_pred_mean 				= recal_pred_mean.flatten()
+recal_pred_std 				= recal_pred_std.flatten()
+exp_props, obs_props 			= uct.metrics_calibration.get_proportion_lists_vectorized(recal_pred_mean, recal_pred_std, recal_y,)
+
+# Train a recalibration model.
+recal_model = uct.recalibration.iso_recal(exp_props, obs_props)
+# Get the expected props and observed props using the new recalibrated model
+te_recal_exp_props, te_recal_obs_props = uct.metrics_calibration.get_proportion_lists_vectorized(pred_mean, pred_std, te_y, recal_model=recal_model)
+"""Get prediction intervals using recalibrated model."""
+orig_bounds 	= uct.metrics_calibration.get_prediction_interval(pred_mean, pred_std, 0.95, None)
+recal_bounds 	= uct.metrics_calibration.get_prediction_interval(pred_mean, pred_std, 0.95, recal_model)
+
+# print('Original bounds:')
+# print(orig_bounds.upper.shape, orig_bounds.lower.shape)
+# print(orig_bounds)  
+# print('Recalibrated:')  
+# print(recal_bounds)    
+
+print(recal_bounds.upper.shape, pred_mean.shape, pred_std.shape)
+rs = recal_bounds.upper.shape[0]
+print(rs)
+
+sameaspred = 0.0
+for i in range(0, rs):
+	print(recal_bounds.lower[i]*test_out_dx + test_out_mean, pred_mean[i]*test_out_dx + test_out_mean, te_y[i]*test_out_dx + test_out_mean, pred_std[i], recal_bounds.upper[i]*test_out_dx + test_out_mean)
+#	print(recal_bounds.lower[[i]])
+	if pred_mean[i]*test_out_dx + test_out_mean > 0.8 and te_y[i]*test_out_dx + test_out_mean > 0.8:
+		sameaspred = sameaspred + 1.0
+	if pred_mean[i]*test_out_dx + test_out_mean <= 0.8 and te_y[i]*test_out_dx + test_out_mean <= 0.8:
+		sameaspred = sameaspred + 1.0
+
+print(sameaspred, rs, sameaspred/rs)
+
+# the probablity is as simple as: p(event_i) = #events_i / total_num_events.
