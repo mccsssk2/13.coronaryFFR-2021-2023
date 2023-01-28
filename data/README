@@ -1,0 +1,6 @@
+Run this in script using OneDSolver as:
+
+mpirun -n 4 OneDSolver ./Coronary1D.in
+
+The profuse screen output can be directed to
+a suitable stderrstdout file.
