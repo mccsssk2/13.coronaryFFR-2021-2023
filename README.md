@@ -35,7 +35,8 @@ support is likely. The GUI uses VTK library.
 
 # Install.
 
-The installation of dependencies may benefit as follows.  
+The installation of dependencies may benefit as follows. The sources I am using are provided on this GitHub page.  
+
 * SimVascular GUI. Its an installation exe (Windows), dmg (Mac) which can be done using standard point-and-click process. Developers are recommended to use Linux (a free varient of Red Hat, closest of which is Fedora 32 and above).
 * GNU Parallel is suitable for serial farming. see: https://www.gnu.org/software/parallel/  
 * The SV 1D Solver should be compiled from source. Use the mpicc wrapper, f77/f90 is required for Blas-Lapack. The compiling is driven by a cmake/ccmake, where the sparse solver must be chosen to reflect the sparse nature of the systems matrices. The 1D solver binary can be parallelized, but the serial version is sufficient. When using parallel version, the output should 
