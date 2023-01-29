@@ -55,7 +55,7 @@ semi-automatic. It is described in the platforms documentation. Practical aspect
 * Tut 2: shorturl.at/BGNVZ (Tim, see all parts).
 * Tut 3: shorturl.at/ARUX1 (Miya, aorta in 3D).  
 
-The end result of the image processing is a VTK file, and ASCII files that provide centerline coordinates with a diamter at each coordinate. In 1D modelling, the latter is used. A reconstruction of the 1D (1D in that 1D finite elements are used) model and the estimated FFR (and compared to invasive measurements) is shown in the figure below.  
+The end result of the image processing is a VTK file, and ASCII files that provide centerline coordinates with a diamter at each coordinate. In 1D modelling, the latter is used. A reconstruction of the 1D (1D in that 1D finite elements are used) model and the estimated FFR (and compared to invasive measurements) is shown in the figure below. The filled circles are model predictions and the "x" are invasive observations from Robart's Institute.  
 
 ![srkFFRDraft4](Figure1.png)
 
